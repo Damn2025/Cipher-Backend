@@ -13,6 +13,43 @@ import { MobileSecurityScanner } from "./mobile-scanner";
 type Env = {
   SUPABASE_URL?: string;
   SUPABASE_KEY?: string;
+  ALLOWED_ORIGINS?: string;
+};
+
+// Helper to check if origin is allowed
+const isOriginAllowed = (origin: string | undefined | null, env?: Env): string | null => {
+  const allowedOrigins = [
+    "https://cyber-sec.evokeai.info",
+    "https://www.cyber-sec.evokeai.info",
+    "https://cybersec-frontend.pages.dev",
+    "http://localhost:5173",
+    "http://localhost:3000",
+  ];
+
+  // Default fallback if no origin
+  if (!origin) return allowedOrigins[0];
+
+  // Check static list
+  if (allowedOrigins.includes(origin)) return origin;
+
+  // Check env var
+  if (env?.ALLOWED_ORIGINS) {
+    const envOrigins = env.ALLOWED_ORIGINS.split(',').map(o => o.trim());
+    if (envOrigins.includes(origin)) return origin;
+  }
+
+  // Check patterns (Cloudflare Pages previews, subdomains, local dev)
+  const allowPatterns = [
+    /^https:\/\/.*\.pages\.dev$/,        // Any Cloudflare Pages preview
+    /^https:\/\/.*\.evokeai\.info$/,     // Any subdomain of evokeai.info
+    /^http:\/\/localhost:\d+$/           // Any local port
+  ];
+
+  if (allowPatterns.some(pattern => pattern.test(origin))) {
+    return origin;
+  }
+
+  return null;
 };
 
 // Some mobile scan fields (e.g., evidence, code snippets) can contain null bytes,
@@ -62,7 +99,30 @@ app.use("/*", async (c, next) => {
 });
 // #endregion
 
-// Explicit OPTIONS handler for preflight requests
+// Handle OPTIONS requests at middleware level (before CORS middleware)
+app.use("/*", async (c, next) => {
+  if (c.req.method === "OPTIONS") {
+    const origin = c.req.header("Origin");
+    const corsOrigin = isOriginAllowed(origin, c.env) || "https://cyber-sec.evokeai.info";
+    
+    // #region agent log
+    const logDataOPTIONS = {location:'index.ts:66',message:'OPTIONS preflight (middleware)',data:{origin,method:'OPTIONS',path:c.req.path,corsOrigin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'OPTIONS-MW'};
+    console.log('[DEBUG-OPTIONS-MW]', JSON.stringify(logDataOPTIONS));
+    try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataOPTIONS)});}catch(e){}
+    // #endregion
+    
+    return c.json({}, 200, {
+      "Access-Control-Allow-Origin": corsOrigin,
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Max-Age": "86400",
+    });
+  }
+  await next();
+});
+
+// Explicit OPTIONS handler for preflight requests (backup)
 app.options("/*", async (c) => {
   // #region agent log
   const origin = c.req.header("Origin");
@@ -79,29 +139,14 @@ app.options("/*", async (c) => {
   try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataOPTIONS)});}catch(e){}
   // #endregion
   
-  const allowedOrigins = [
-    "https://cyber-sec.evokeai.info",
-    "https://www.cyber-sec.evokeai.info",
-    "https://cybersec-frontend.pages.dev",
-    "http://localhost:5173",
-    "http://localhost:3000",
-  ];
+  // Always return proper CORS headers for OPTIONS preflight
+  const corsOrigin = isOriginAllowed(origin, c.env) || "https://cyber-sec.evokeai.info";
   
-  if (origin && allowedOrigins.includes(origin)) {
-    return c.json({}, 200, {
-      "Access-Control-Allow-Origin": origin,
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Max-Age": "86400",
-    });
-  }
-  
-  // Even if no origin, return 200 for OPTIONS (some clients don't send Origin)
   return c.json({}, 200, {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": corsOrigin,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Allow-Credentials": "true",
     "Access-Control-Max-Age": "86400",
   });
 });
@@ -134,28 +179,13 @@ app.use(
 app.use(
   "/*",
   cors({
-    origin: (origin) => {
+    origin: (origin, c) => {
       // #region agent log
       const logDataCorsOrigin = {location:'index.ts:117',message:'CORS origin check',data:{origin,allowedOrigins:["https://cyber-sec.evokeai.info","https://www.cyber-sec.evokeai.info","https://cybersec-frontend.pages.dev","http://localhost:5173","http://localhost:3000"]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'CORS-ORIGIN'};
       console.log('[DEBUG-CORS-ORIGIN]', JSON.stringify(logDataCorsOrigin));
       fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataCorsOrigin)}).catch(()=>{});
       // #endregion
-      const allowedOrigins = [
-        "https://cyber-sec.evokeai.info",
-        "https://www.cyber-sec.evokeai.info",
-        "https://cybersec-frontend.pages.dev",
-        "http://localhost:5173",
-        "http://localhost:3000",
-      ];
-      if (!origin) {
-        // No origin header - return first allowed origin as fallback
-        // This handles cases where Origin header might be missing
-        return allowedOrigins[0];
-      }
-      if (allowedOrigins.includes(origin)) {
-        return origin;
-      }
-      return null; // Reject if not in allowed list (null instead of false)
+      return isOriginAllowed(origin, c.env);
     },
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
