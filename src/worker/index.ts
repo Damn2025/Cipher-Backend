@@ -62,6 +62,20 @@ app.onError((err, c) => {
   }, 500);
 });
 
+// Root route - API health check
+app.get("/", async (c) => {
+  return c.json({
+    message: "CyberSec API",
+    version: "1.0.0",
+    status: "online",
+    endpoints: {
+      scans: "/api/scans",
+      mobileScans: "/api/mobile-scans",
+      dashboard: "/api/dashboard/stats",
+    }
+  });
+});
+
 // Polyfill helper for executionCtx.waitUntil (missing in Netlify)
 const safeWaitUntil = (c: any, promise: Promise<void>) => {
   if (c.executionCtx && typeof c.executionCtx.waitUntil === 'function') {
