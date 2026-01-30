@@ -44,9 +44,9 @@ app.use(
       "http://localhost:5173",
       "http://localhost:3000",
     ],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-    exposeHeaders: ["Content-Length"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    exposeHeaders: ["Content-Length", "Content-Type"],
     maxAge: 86400,
     credentials: true,
   })
