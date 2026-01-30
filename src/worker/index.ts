@@ -33,7 +33,44 @@ const sanitizeFileName = (name: string): string => {
 
 const app = new Hono<{ Bindings: Env }>();
 
+// #region agent log
+// Debug middleware to log incoming requests
+app.use("/*", async (c, next) => {
+  const origin = c.req.header("Origin") || "no-origin";
+  const method = c.req.method;
+  const url = c.req.url;
+  const logDataA = {location:'index.ts:37',message:'Request received',data:{origin,method,url,path:c.req.path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
+  console.log('[DEBUG-A]', JSON.stringify(logDataA));
+  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataA)});}catch(e){}
+  await next();
+  const corsHeader = c.res.headers.get("Access-Control-Allow-Origin");
+  const logDataB = {location:'index.ts:42',message:'Response headers after CORS',data:{origin,method,status:c.res.status,corsHeader,allHeaders:Object.fromEntries(c.res.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
+  console.log('[DEBUG-B]', JSON.stringify(logDataB));
+  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataB)});}catch(e){}
+});
+// #endregion
+
 // CORS: allow frontend origin(s); credentials for Authorization header
+app.use(
+  "/*",
+  async (c, next) => {
+    // #region agent log
+    const origin = c.req.header("Origin");
+    const method = c.req.method;
+    const logDataC = {location:'index.ts:50',message:'Before CORS middleware',data:{origin,method,path:c.req.path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
+    console.log('[DEBUG-C]', JSON.stringify(logDataC));
+    try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataC)});}catch(e){}
+    // #endregion
+    await next();
+    // #region agent log
+    const corsHeader = c.res.headers.get("Access-Control-Allow-Origin");
+    const logDataD = {location:'index.ts:57',message:'After CORS middleware',data:{origin,method,status:c.res.status,corsHeader,allHeaders:Object.fromEntries(c.res.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
+    console.log('[DEBUG-D]', JSON.stringify(logDataD));
+    try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataD)});}catch(e){}
+    // #endregion
+  }
+);
+
 app.use(
   "/*",
   cors({
@@ -53,13 +90,30 @@ app.use(
 );
 
 // Global error handler to prevent 502/crashes
-app.onError((err, c) => {
+app.onError(async (err, c) => {
+  const origin = c.req.header("Origin") || "no-origin";
+  const method = c.req.method;
+  const logDataE = {location:'index.ts:56',message:'Error handler triggered',data:{origin,method,path:c.req.path,error:err.message,errorStack:err.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'};
+  console.log('[DEBUG-E]', JSON.stringify(logDataE));
+  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataE)});}catch(e){}
   console.error("Global App Error:", err);
-  return c.json({
+  const response = c.json({
     error: "Internal Server Error",
     message: err.message,
     stack: process.env.NODE_ENV === "development" ? err.stack : undefined
   }, 500);
+  // #region agent log
+  // Preserve CORS headers if they exist
+  const existingCors = c.res.headers.get("Access-Control-Allow-Origin");
+  if (existingCors) {
+    response.headers.set("Access-Control-Allow-Origin", existingCors);
+    response.headers.set("Access-Control-Allow-Credentials", "true");
+  }
+  const logDataF = {location:'index.ts:70',message:'Error response headers',data:{origin,method,hasCors:!!existingCors,corsValue:existingCors,responseHeaders:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'};
+  console.log('[DEBUG-F]', JSON.stringify(logDataF));
+  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataF)});}catch(e){}
+  // #endregion
+  return response;
 });
 
 // Root route - API health check
@@ -138,11 +192,24 @@ const getUserIdFromRequest = async (c: any): Promise<string | null> => {
 
 // Get all scans (scoped to current user)
 app.get("/api/scans", async (c) => {
+  // #region agent log
+  const origin = c.req.header("Origin") || "no-origin";
+  const method = c.req.method;
+  const logDataG = {location:'index.ts:175',message:'GET /api/scans handler entry',data:{origin,method,path:c.req.path,responseHeaders:Object.fromEntries(c.res.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'};
+  console.log('[DEBUG-G]', JSON.stringify(logDataG));
+  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataG)});}catch(e){}
+  // #endregion
   const supabase = getSupabase(c.env);
   const userId = await getUserIdFromRequest(c);
 
   if (!userId) {
-    return c.json({ error: "Unauthorized" }, 401);
+    const response = c.json({ error: "Unauthorized" }, 401);
+    // #region agent log
+    const logDataH = {location:'index.ts:182',message:'GET /api/scans unauthorized response',data:{origin,method,responseHeaders:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'};
+    console.log('[DEBUG-H]', JSON.stringify(logDataH));
+    try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataH)});}catch(e){}
+    // #endregion
+    return response;
   }
 
   const { data, error } = await supabase
@@ -152,8 +219,22 @@ app.get("/api/scans", async (c) => {
     .order("created_at", { ascending: false })
     .limit(50);
 
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json(data);
+  if (error) {
+    const response = c.json({ error: error.message }, 500);
+    // #region agent log
+    const logDataI = {location:'index.ts:194',message:'GET /api/scans error response',data:{origin,method,error:error.message,responseHeaders:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'};
+    console.log('[DEBUG-I]', JSON.stringify(logDataI));
+    try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataI)});}catch(e){}
+    // #endregion
+    return response;
+  }
+  const response = c.json(data);
+  // #region agent log
+  const logDataJ = {location:'index.ts:199',message:'GET /api/scans success response',data:{origin,method,dataCount:data?.length,responseHeaders:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'};
+  console.log('[DEBUG-J]', JSON.stringify(logDataJ));
+  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataJ)});}catch(e){}
+  // #endregion
+  return response;
 });
 
 // Get a single scan (scoped to current user)
