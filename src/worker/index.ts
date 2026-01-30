@@ -40,15 +40,23 @@ app.use("/*", async (c, next) => {
   const method = c.req.method;
   const url = c.req.url;
   const allRequestHeaders: Record<string, string> = {};
-  c.req.header() && Object.keys(c.req.header()).forEach(key => {
-    allRequestHeaders[key] = c.req.header(key) || '';
-  });
+  const reqHeaders = c.req.header();
+  if (reqHeaders) {
+    Object.keys(reqHeaders).forEach(key => {
+      const value = c.req.header(key);
+      if (value) allRequestHeaders[key] = value;
+    });
+  }
   const logDataA = {location:'index.ts:37',message:'Request received',data:{origin,method,url,path:c.req.path,allRequestHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
   console.log('[DEBUG-A]', JSON.stringify(logDataA));
   try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataA)});}catch(e){}
   await next();
   const corsHeader = c.res.headers.get("Access-Control-Allow-Origin");
-  const logDataB = {location:'index.ts:42',message:'Response headers after CORS',data:{origin,method,status:c.res.status,corsHeader,allHeaders:Object.fromEntries(c.res.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
+  const responseHeaders: Record<string, string> = {};
+  c.res.headers.forEach((value, key) => {
+    responseHeaders[key] = value;
+  });
+  const logDataB = {location:'index.ts:42',message:'Response headers after CORS',data:{origin,method,status:c.res.status,corsHeader,allHeaders:responseHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
   console.log('[DEBUG-B]', JSON.stringify(logDataB));
   try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataB)});}catch(e){}
 });
@@ -58,7 +66,15 @@ app.use("/*", async (c, next) => {
 app.options("/*", async (c) => {
   // #region agent log
   const origin = c.req.header("Origin");
-  const logDataOPTIONS = {location:'index.ts:52',message:'OPTIONS preflight request',data:{origin,method:'OPTIONS',path:c.req.path,requestHeaders:Object.fromEntries(c.req.header())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'OPTIONS'};
+  const requestHeaders: Record<string, string> = {};
+  const reqHeaders = c.req.header();
+  if (reqHeaders) {
+    Object.keys(reqHeaders).forEach(key => {
+      const value = c.req.header(key);
+      if (value) requestHeaders[key] = value;
+    });
+  }
+  const logDataOPTIONS = {location:'index.ts:58',message:'OPTIONS preflight request',data:{origin,method:'OPTIONS',path:c.req.path,requestHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'OPTIONS'};
   console.log('[DEBUG-OPTIONS]', JSON.stringify(logDataOPTIONS));
   try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataOPTIONS)});}catch(e){}
   // #endregion
@@ -104,7 +120,11 @@ app.use(
     await next();
     // #region agent log
     const corsHeader = c.res.headers.get("Access-Control-Allow-Origin");
-    const logDataD = {location:'index.ts:57',message:'After CORS middleware',data:{origin,method,status:c.res.status,corsHeader,allHeaders:Object.fromEntries(c.res.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
+    const responseHeadersD: Record<string, string> = {};
+    c.res.headers.forEach((value, key) => {
+      responseHeadersD[key] = value;
+    });
+    const logDataD = {location:'index.ts:121',message:'After CORS middleware',data:{origin,method,status:c.res.status,corsHeader,allHeaders:responseHeadersD},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
     console.log('[DEBUG-D]', JSON.stringify(logDataD));
     try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataD)});}catch(e){}
     // #endregion
@@ -116,7 +136,7 @@ app.use(
   cors({
     origin: (origin) => {
       // #region agent log
-      const logDataCorsOrigin = {location:'index.ts:95',message:'CORS origin check',data:{origin,allowedOrigins:["https://cyber-sec.evokeai.info","https://www.cyber-sec.evokeai.info","https://cybersec-frontend.pages.dev","http://localhost:5173","http://localhost:3000"]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'CORS-ORIGIN'};
+      const logDataCorsOrigin = {location:'index.ts:117',message:'CORS origin check',data:{origin,allowedOrigins:["https://cyber-sec.evokeai.info","https://www.cyber-sec.evokeai.info","https://cybersec-frontend.pages.dev","http://localhost:5173","http://localhost:3000"]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'CORS-ORIGIN'};
       console.log('[DEBUG-CORS-ORIGIN]', JSON.stringify(logDataCorsOrigin));
       fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataCorsOrigin)}).catch(()=>{});
       // #endregion
@@ -135,7 +155,7 @@ app.use(
       if (allowedOrigins.includes(origin)) {
         return origin;
       }
-      return false; // Reject if not in allowed list
+      return null; // Reject if not in allowed list (null instead of false)
     },
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
@@ -165,7 +185,11 @@ app.onError(async (err, c) => {
     response.headers.set("Access-Control-Allow-Origin", existingCors);
     response.headers.set("Access-Control-Allow-Credentials", "true");
   }
-  const logDataF = {location:'index.ts:70',message:'Error response headers',data:{origin,method,hasCors:!!existingCors,corsValue:existingCors,responseHeaders:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'};
+  const errorResponseHeaders: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    errorResponseHeaders[key] = value;
+  });
+  const logDataF = {location:'index.ts:184',message:'Error response headers',data:{origin,method,hasCors:!!existingCors,corsValue:existingCors,responseHeaders:errorResponseHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'};
   console.log('[DEBUG-F]', JSON.stringify(logDataF));
   try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataF)});}catch(e){}
   // #endregion
@@ -251,7 +275,11 @@ app.get("/api/scans", async (c) => {
   // #region agent log
   const origin = c.req.header("Origin") || "no-origin";
   const method = c.req.method;
-  const logDataG = {location:'index.ts:175',message:'GET /api/scans handler entry',data:{origin,method,path:c.req.path,responseHeaders:Object.fromEntries(c.res.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'};
+  const entryHeaders: Record<string, string> = {};
+  c.res.headers.forEach((value, key) => {
+    entryHeaders[key] = value;
+  });
+  const logDataG = {location:'index.ts:270',message:'GET /api/scans handler entry',data:{origin,method,path:c.req.path,responseHeaders:entryHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'};
   console.log('[DEBUG-G]', JSON.stringify(logDataG));
   try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataG)});}catch(e){}
   // #endregion
@@ -261,7 +289,11 @@ app.get("/api/scans", async (c) => {
   if (!userId) {
     const response = c.json({ error: "Unauthorized" }, 401);
     // #region agent log
-    const logDataH = {location:'index.ts:182',message:'GET /api/scans unauthorized response',data:{origin,method,responseHeaders:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'};
+    const unauthorizedHeaders: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      unauthorizedHeaders[key] = value;
+    });
+    const logDataH = {location:'index.ts:280',message:'GET /api/scans unauthorized response',data:{origin,method,responseHeaders:unauthorizedHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H'};
     console.log('[DEBUG-H]', JSON.stringify(logDataH));
     try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataH)});}catch(e){}
     // #endregion
@@ -278,7 +310,11 @@ app.get("/api/scans", async (c) => {
   if (error) {
     const response = c.json({ error: error.message }, 500);
     // #region agent log
-    const logDataI = {location:'index.ts:194',message:'GET /api/scans error response',data:{origin,method,error:error.message,responseHeaders:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'};
+    const errorHeaders: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      errorHeaders[key] = value;
+    });
+    const logDataI = {location:'index.ts:297',message:'GET /api/scans error response',data:{origin,method,error:error.message,responseHeaders:errorHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'I'};
     console.log('[DEBUG-I]', JSON.stringify(logDataI));
     try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataI)});}catch(e){}
     // #endregion
@@ -286,7 +322,11 @@ app.get("/api/scans", async (c) => {
   }
   const response = c.json(data);
   // #region agent log
-  const logDataJ = {location:'index.ts:199',message:'GET /api/scans success response',data:{origin,method,dataCount:data?.length,responseHeaders:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'};
+  const successHeaders: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    successHeaders[key] = value;
+  });
+  const logDataJ = {location:'index.ts:305',message:'GET /api/scans success response',data:{origin,method,dataCount:data?.length,responseHeaders:successHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'J'};
   console.log('[DEBUG-J]', JSON.stringify(logDataJ));
   try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataJ)});}catch(e){}
   // #endregion
