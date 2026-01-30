@@ -33,7 +33,24 @@ const sanitizeFileName = (name: string): string => {
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.use("/*", cors());
+// CORS: allow frontend origin(s); credentials for Authorization header
+app.use(
+  "/*",
+  cors({
+    origin: [
+      "https://cyber-sec.evokeai.info",
+      "https://www.cyber-sec.evokeai.info",
+      "https://cybersec-frontend.pages.dev",
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    exposeHeaders: ["Content-Length"],
+    maxAge: 86400,
+    credentials: true,
+  })
+);
 
 // Global error handler to prevent 502/crashes
 app.onError((err, c) => {
