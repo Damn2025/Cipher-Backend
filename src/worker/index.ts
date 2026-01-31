@@ -42,6 +42,7 @@ const isOriginAllowed = (origin: string | undefined | null, env?: Env): string |
   const allowPatterns = [
     /^https:\/\/.*\.pages\.dev$/,        // Any Cloudflare Pages preview
     /^https:\/\/.*\.evokeai\.info$/,     // Any subdomain of evokeai.info
+    /^https:\/\/.*\.evoke\.info$/,       // Any subdomain of evoke.info
     /^http:\/\/localhost:\d+$/           // Any local port
   ];
 
@@ -70,6 +71,21 @@ const sanitizeFileName = (name: string): string => {
 
 const app = new Hono<{ Bindings: Env }>();
 
+// Standardize Hono CORS Middleware - Intercepts every request
+app.use(
+  "/*",
+  cors({
+    origin: (origin, c) => {
+      return isOriginAllowed(origin, c.env);
+    },
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    exposeHeaders: ["Content-Length", "Content-Type"],
+    maxAge: 86400,
+    credentials: true,
+  })
+);
+
 // #region agent log
 // Debug middleware to log incoming requests
 app.use("/*", async (c, next) => {
@@ -88,112 +104,8 @@ app.use("/*", async (c, next) => {
   console.log('[DEBUG-A]', JSON.stringify(logDataA));
   try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataA)});}catch(e){}
   await next();
-  const corsHeader = c.res.headers.get("Access-Control-Allow-Origin");
-  const responseHeaders: Record<string, string> = {};
-  c.res.headers.forEach((value, key) => {
-    responseHeaders[key] = value;
-  });
-  const logDataB = {location:'index.ts:42',message:'Response headers after CORS',data:{origin,method,status:c.res.status,corsHeader,allHeaders:responseHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
-  console.log('[DEBUG-B]', JSON.stringify(logDataB));
-  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataB)});}catch(e){}
 });
 // #endregion
-
-// Handle OPTIONS requests at middleware level (before CORS middleware)
-app.use("/*", async (c, next) => {
-  if (c.req.method === "OPTIONS") {
-    const origin = c.req.header("Origin");
-    const corsOrigin = isOriginAllowed(origin, c.env) || "https://cyber-sec.evokeai.info";
-    
-    // #region agent log
-    const logDataOPTIONS = {location:'index.ts:66',message:'OPTIONS preflight (middleware)',data:{origin,method:'OPTIONS',path:c.req.path,corsOrigin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'OPTIONS-MW'};
-    console.log('[DEBUG-OPTIONS-MW]', JSON.stringify(logDataOPTIONS));
-    try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataOPTIONS)});}catch(e){}
-    // #endregion
-    
-    return c.json({}, 200, {
-      "Access-Control-Allow-Origin": corsOrigin,
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Max-Age": "86400",
-    });
-  }
-  await next();
-});
-
-// Explicit OPTIONS handler for preflight requests (backup)
-app.options("/*", async (c) => {
-  // #region agent log
-  const origin = c.req.header("Origin");
-  const requestHeaders: Record<string, string> = {};
-  const reqHeaders = c.req.header();
-  if (reqHeaders) {
-    Object.keys(reqHeaders).forEach(key => {
-      const value = c.req.header(key);
-      if (value) requestHeaders[key] = value;
-    });
-  }
-  const logDataOPTIONS = {location:'index.ts:58',message:'OPTIONS preflight request',data:{origin,method:'OPTIONS',path:c.req.path,requestHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'OPTIONS'};
-  console.log('[DEBUG-OPTIONS]', JSON.stringify(logDataOPTIONS));
-  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataOPTIONS)});}catch(e){}
-  // #endregion
-  
-  // Always return proper CORS headers for OPTIONS preflight
-  const corsOrigin = isOriginAllowed(origin, c.env) || "https://cyber-sec.evokeai.info";
-  
-  return c.json({}, 200, {
-    "Access-Control-Allow-Origin": corsOrigin,
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Max-Age": "86400",
-  });
-});
-
-// CORS: allow frontend origin(s); credentials for Authorization header
-app.use(
-  "/*",
-  async (c, next) => {
-    // #region agent log
-    const origin = c.req.header("Origin");
-    const method = c.req.method;
-    const logDataC = {location:'index.ts:50',message:'Before CORS middleware',data:{origin,method,path:c.req.path},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
-    console.log('[DEBUG-C]', JSON.stringify(logDataC));
-    try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataC)});}catch(e){}
-    // #endregion
-    await next();
-    // #region agent log
-    const corsHeader = c.res.headers.get("Access-Control-Allow-Origin");
-    const responseHeadersD: Record<string, string> = {};
-    c.res.headers.forEach((value, key) => {
-      responseHeadersD[key] = value;
-    });
-    const logDataD = {location:'index.ts:121',message:'After CORS middleware',data:{origin,method,status:c.res.status,corsHeader,allHeaders:responseHeadersD},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'};
-    console.log('[DEBUG-D]', JSON.stringify(logDataD));
-    try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataD)});}catch(e){}
-    // #endregion
-  }
-);
-
-app.use(
-  "/*",
-  cors({
-    origin: (origin, c) => {
-      // #region agent log
-      const logDataCorsOrigin = {location:'index.ts:117',message:'CORS origin check',data:{origin,allowedOrigins:["https://cyber-sec.evokeai.info","https://www.cyber-sec.evokeai.info","https://cybersec-frontend.pages.dev","http://localhost:5173","http://localhost:3000"]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'CORS-ORIGIN'};
-      console.log('[DEBUG-CORS-ORIGIN]', JSON.stringify(logDataCorsOrigin));
-      fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataCorsOrigin)}).catch(()=>{});
-      // #endregion
-      return isOriginAllowed(origin, c.env);
-    },
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-    exposeHeaders: ["Content-Length", "Content-Type"],
-    maxAge: 86400,
-    credentials: true,
-  })
-);
 
 // Global error handler to prevent 502/crashes
 app.onError(async (err, c) => {
