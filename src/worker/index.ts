@@ -86,16 +86,56 @@ app.use(
   })
 );
 
-
+// #region agent log
+// Debug middleware to log incoming requests
+app.use("/*", async (c, next) => {
+  const origin = c.req.header("Origin") || "no-origin";
+  const method = c.req.method;
+  const url = c.req.url;
+  const allRequestHeaders: Record<string, string> = {};
+  const reqHeaders = c.req.header();
+  if (reqHeaders) {
+    Object.keys(reqHeaders).forEach(key => {
+      const value = c.req.header(key);
+      if (value) allRequestHeaders[key] = value;
+    });
+  }
+  const logDataA = {location:'index.ts:37',message:'Request received',data:{origin,method,url,path:c.req.path,allRequestHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
+  console.log('[DEBUG-A]', JSON.stringify(logDataA));
+  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataA)});}catch(e){}
+  await next();
+});
+// #endregion
 
 // Global error handler to prevent 502/crashes
-app.onError((err, c) => {
+app.onError(async (err, c) => {
+  const origin = c.req.header("Origin") || "no-origin";
+  const method = c.req.method;
+  const logDataE = {location:'index.ts:56',message:'Error handler triggered',data:{origin,method,path:c.req.path,error:err.message,errorStack:err.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'};
+  console.log('[DEBUG-E]', JSON.stringify(logDataE));
+  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataE)});}catch(e){}
   console.error("Global App Error:", err);
-  return c.json({
+  const response = c.json({
     error: "Internal Server Error",
     message: err.message,
     stack: process.env.NODE_ENV === "development" ? err.stack : undefined
   }, 500);
+  // #region agent log
+  // Preserve CORS headers if they exist
+  const existingCors = c.res.headers.get("Access-Control-Allow-Origin");
+  if (existingCors) {
+    response.headers.set("Access-Control-Allow-Origin", existingCors);
+    response.headers.set("Access-Control-Allow-Credentials", "true");
+  }
+  const errorResponseHeaders: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    errorResponseHeaders[key] = value;
+  });
+  const logDataF = {location:'index.ts:184',message:'Error response headers',data:{origin,method,hasCors:!!existingCors,corsValue:existingCors,responseHeaders:errorResponseHeaders},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'};
+  console.log('[DEBUG-F]', JSON.stringify(logDataF));
+  try{await fetch('http://127.0.0.1:7242/ingest/ba89ff76-60d6-4a24-9e5b-798548d4fa24',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logDataF)});}catch(e){}
+  // #endregion
+  return response;
 });
 
 // Root route - API health check

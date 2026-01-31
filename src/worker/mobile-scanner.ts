@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
+// @ts-ignore
 import { parseString } from 'xml2js';
-import { parse as parsePlist } from 'plist';
+
 
 interface MobileScannerConfig {
   platform: 'android' | 'ios';
@@ -117,11 +118,13 @@ export class MobileSecurityScanner {
       try {
         const plistContent = await this.zip.file(plistFiles[0])?.async('text');
         if (plistContent) {
-          plist = parsePlist(plistContent);
+          const parsedPlist = plist.parse(plistContent) as any;
           
-          this.appMetadata.appName = plist.CFBundleName || plist.CFBundleDisplayName || this.fileName;
-          this.appMetadata.packageName = plist.CFBundleIdentifier || '';
-          this.appMetadata.version = plist.CFBundleShortVersionString || plist.CFBundleVersion || '';
+          this.appMetadata.appName = parsedPlist.CFBundleName || parsedPlist.CFBundleDisplayName || this.fileName;
+          this.appMetadata.packageName = parsedPlist.CFBundleIdentifier || '';
+          this.appMetadata.version = parsedPlist.CFBundleShortVersionString || parsedPlist.CFBundleVersion || '';
+          
+          plist = parsedPlist;
         }
       } catch (error) {
         console.error('Error parsing Info.plist:', error);
