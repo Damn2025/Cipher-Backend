@@ -154,13 +154,18 @@ app.get("/", async (c) => {
 
 // Polyfill helper for executionCtx.waitUntil (missing in Netlify)
 const safeWaitUntil = (c: any, promise: Promise<void>) => {
-  if (c.executionCtx && typeof c.executionCtx.waitUntil === 'function') {
-    c.executionCtx.waitUntil(promise);
-  } else {
-    // In Netlify/Node, we don't have waitUntil.
-    // Ensure we catch errors so unhandled promises don't crash the process
-    promise.catch(err => console.error("Async background task error:", err));
+  try {
+    if (c.executionCtx && typeof c.executionCtx.waitUntil === 'function') {
+      c.executionCtx.waitUntil(promise);
+      return;
+    }
+  } catch (e) {
+    // Ignore error if accessing executionCtx fails (common in some adapters)
   }
+  
+  // In Netlify/Node, we don't have waitUntil.
+  // Ensure we catch errors so unhandled promises don't crash the process
+  promise.catch(err => console.error("Async background task error:", err));
 };
 
 // Helper to get Supabase client with fallback to process.env
